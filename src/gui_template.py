@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGridLayout, QLabel, QWidget, QLineEdit, QHBoxLayout, QVBoxLayout, QPushButton,QGroupBox
 from PyQt5.QtGui import QDoubleValidator
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from mpl_toolkits.mplot3d import Axes3D
 from numpy import array
 import numpy as np
 from pathlib import Path
@@ -27,18 +26,20 @@ class MainWindow(QMainWindow):
         self.setup_ui()
 
     def set_variables(self):
-        self.objeto_original = load_object(stl_path=OBJECT_STL_PATH)
-        self.objeto = self.objeto_original
-        self.cam_original = np.eye(4)
+        self.objeto_original, self.vectors, self.stl_mesh = load_object(stl_path=OBJECT_STL_PATH)
+        self.objeto = self.objeto_original.copy()
+        self.world = np.eye(4)
+        self.cam_original = move(5, 0, 0)@z_rotation(90)@x_rotation(-90)
         self.cam = self.cam_original.copy()
+        self.cam_obj = np.linalg.inv(self.cam)@self.objeto
         self.px_base = 1280
         self.px_altura = 720
-        self.dist_foc = 20
+        self.dist_foc = 30
         self.stheta = 0
         self.ox = self.px_base/2
         self.oy = self.px_altura/2
         self.ccd = [36,24]
-        self.projection_matrix = []
+        self.projection_matrix = self.generate_intrinsic_params_matrix()
         
     def setup_ui(self):
         # Criar o layout de grade
@@ -212,11 +213,12 @@ class MainWindow(QMainWindow):
         self.ax1.set_xlim([0,self.px_base])
         ##### Falta acertar os limites do eixo Y
         self.ax1.set_ylim([self.px_altura,0])
-        
+
         ##### Você deverá criar a função de projeção 
         object_2d = self.projection_2d()
 
         ##### Falta plotar o object_2d que retornou da projeção
+        self.ax1.plot(object_2d[0,:],object_2d[1,:])
           
         self.ax1.grid('True')
         self.ax1.set_aspect('equal')  
@@ -225,8 +227,13 @@ class MainWindow(QMainWindow):
         # Criar um objeto FigureCanvas para exibir o gráfico 3D
         self.fig2 = plt.figure()
         self.ax2 = self.fig2.add_subplot(111, projection='3d')
-        
+        set_plot(self.ax2, self.fig2, lim=[-5,5])
+
         ##### Falta plotar o seu objeto 3D e os referenciais da câmera e do mundo
+        
+        self.ax2 = draw_arrows(self.world[:,-1],self.world[:,0:3],self.ax2,3)
+        self.ax2 = draw_arrows(self.cam[:,-1],self.cam[:,0:3],self.ax2,1)
+        self.ax2.plot(self.objeto[0,:],self.objeto[1,:],self.objeto[2,:],'r')
         
         self.canvas2 = FigureCanvas(self.fig2)
         canvas_layout.addWidget(self.canvas2)
@@ -262,14 +269,47 @@ class MainWindow(QMainWindow):
         self.projection_matrix = self.generate_intrinsic_params_matrix()
         self.update_canvas()
 
+    def read_transform_values(self, line_edits):
+        values = []
+
+        for line_edit in line_edits:
+            text = line_edit.text().strip().replace(",", ".")
+            values.append(float(text) if text else 0)
+
+        return values
+
     def update_world(self,line_edits):
-        return
+        values = self.read_transform_values(line_edits)
+
+        T = move(values[0], values[2], values[4])
+        Rx = x_rotation(values[1])
+        Ry = y_rotation(values[3])
+        Rz = z_rotation(values[5])
+        R = Rz @ Ry @ Rx
+
+        self.cam[0:3, 0:3] = R[0:3, 0:3] @ self.cam[0:3, 0:3]
+        self.cam[0:3, 3] = self.cam[0:3, 3] + T[0:3, 3]
+        self.cam_obj = np.linalg.inv(self.cam) @ self.objeto
+        self.update_canvas()
 
     def update_cam(self,line_edits):
-        return 
+        values = self.read_transform_values(line_edits)
+
+        T = move(values[0], values[2], values[4])
+        Rx = x_rotation(values[1])
+        Ry = y_rotation(values[3])
+        Rz = z_rotation(values[5])
+        R = Rz @ Ry @ Rx
+
+        self.cam[0:3, 3] = self.cam[0:3, 3] + self.cam[0:3, 0:3] @ T[0:3, 3]
+        self.cam[0:3, 0:3] = self.cam[0:3, 0:3] @ R[0:3, 0:3]
+        self.cam_obj = np.linalg.inv(self.cam) @ self.objeto
+        self.update_canvas()
     
     def projection_2d(self):
-        return 
+        self.projection_matrix = self.generate_intrinsic_params_matrix()
+        proj_points = image_project(self.projection_matrix,self.cam,self.objeto)
+        return proj_points
     
     def generate_intrinsic_params_matrix(self):
         sx = self.px_base / self.ccd[0]
@@ -282,10 +322,29 @@ class MainWindow(QMainWindow):
         ])
 
     def update_canvas(self):
-        ...
+        self.cam_obj = np.linalg.inv(self.cam) @ self.objeto
+        object_2d = self.projection_2d()
+
+        self.ax1.clear()
+        self.ax1.set_title("Imagem")
+        self.ax1.set_xlim([0, self.px_base])
+        self.ax1.set_ylim([self.px_altura, 0])
+        self.ax1.plot(object_2d[0, :], object_2d[1, :])
+        self.ax1.grid(True)
+        self.ax1.set_aspect('equal')
+
+        self.ax2.clear()
+        set_plot(self.ax2, self.fig2, lim=[-5, 5])
+        self.ax2 = draw_arrows(self.world[:, -1], self.world[:, 0:3], self.ax2, 3)
+        self.ax2 = draw_arrows(self.cam[:, -1], self.cam[:, 0:3], self.ax2, 1)
+        self.ax2.plot(self.objeto[0, :], self.objeto[1, :], self.objeto[2, :], 'r')
+
+        self.canvas1.draw()
+        self.canvas2.draw()
     
     def reset_canvas(self):
-        return
+        self.set_variables()
+        self.update_canvas()
     
 if __name__ == '__main__':
     app = QApplication(sys.argv)
