@@ -31,7 +31,6 @@ class MainWindow(QMainWindow):
         self.world = np.eye(4)
         self.cam_original = move(5, 0, 0)@z_rotation(90)@x_rotation(-90)
         self.cam = self.cam_original.copy()
-        self.cam_obj = np.linalg.inv(self.cam)@self.objeto
         self.px_base = 1280
         self.px_altura = 720
         self.dist_foc = 30
@@ -278,25 +277,28 @@ class MainWindow(QMainWindow):
 
         return values
 
-    def update_world(self,line_edits):
+    def update_world(self, line_edits):
         values = self.read_transform_values(line_edits)
-        T = move(values[0], values[2], values[4])
-        Rx = x_rotation(values[1])
-        Ry = y_rotation(values[3])
-        Rz = z_rotation(values[5])
-        M = T@Rz@Ry@Rx
-        self.cam = M@self.cam
+        rigid_motion = self.compose_rigid_motion(values)
+        self.cam = rigid_motion@self.cam
         self.update_canvas()
 
     def update_cam(self,line_edits):
         values = self.read_transform_values(line_edits)
-        T = move(values[0], values[2], values[4])
-        Rx = x_rotation(values[1])
-        Ry = y_rotation(values[3])
-        Rz = z_rotation(values[5])
-        M = T@Rz@Ry@Rx
-        self.cam = self.cam@M
+        rigid_motion = self.compose_rigid_motion(values)
+        self.cam = self.cam@rigid_motion
         self.update_canvas()
+
+    def compose_rigid_motion(self, values):
+        translation = move(values[0], values[2], values[4])
+
+        rotation = (
+            z_rotation(values[5])
+            @ y_rotation(values[3])
+            @ x_rotation(values[1])
+        )
+
+        return translation @ rotation
     
     def projection_2d(self):
         self.projection_matrix = self.generate_intrinsic_params_matrix()
@@ -307,14 +309,13 @@ class MainWindow(QMainWindow):
         sx = self.px_base / self.ccd[0]
         sy = self.px_altura / self.ccd[1]
 
-        return array([
+        return np.array([
             [self.dist_foc * sx, self.dist_foc * self.stheta, self.ox],
             [0, self.dist_foc * sy, self.oy],
             [0, 0, 1],
         ])
 
     def update_canvas(self):
-        self.cam_obj = np.linalg.inv(self.cam) @ self.objeto
         object_2d = self.projection_2d()
 
         self.ax1.clear()
