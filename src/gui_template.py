@@ -6,9 +6,9 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from numpy import array
 import numpy as np
 from pathlib import Path
-from .camera import *
-from .object import *
-from .draw import *
+from .camera import image_project
+from .object import load_object
+from .draw import set_plot, draw_arrows
 from .transformations import *
 
 # Defining the relative path of the object
@@ -230,10 +230,10 @@ class MainWindow(QMainWindow):
         set_plot(self.ax2, self.fig2, lim=[-5,5])
 
         ##### Falta plotar o seu objeto 3D e os referenciais da câmera e do mundo
-        
-        self.ax2 = draw_arrows(self.world[:,-1],self.world[:,0:3],self.ax2,3)
-        self.ax2 = draw_arrows(self.cam[:,-1],self.cam[:,0:3],self.ax2,1)
-        self.ax2.plot(self.objeto[0,:],self.objeto[1,:],self.objeto[2,:],'r')
+
+        self.ax2 = draw_arrows(self.world[:,-1],self.world[:,0:3],self.ax2,1.5)
+        self.ax2 = draw_arrows(self.cam[:,-1],self.cam[:,0:3],self.ax2,0.75)
+        self.ax2.plot(self.objeto[0,:],self.objeto[1,:],self.objeto[2,:],'b')
         
         self.canvas2 = FigureCanvas(self.fig2)
         canvas_layout.addWidget(self.canvas2)
@@ -280,30 +280,22 @@ class MainWindow(QMainWindow):
 
     def update_world(self,line_edits):
         values = self.read_transform_values(line_edits)
-
         T = move(values[0], values[2], values[4])
         Rx = x_rotation(values[1])
         Ry = y_rotation(values[3])
         Rz = z_rotation(values[5])
-        R = Rz @ Ry @ Rx
-
-        self.cam[0:3, 0:3] = R[0:3, 0:3] @ self.cam[0:3, 0:3]
-        self.cam[0:3, 3] = self.cam[0:3, 3] + T[0:3, 3]
-        self.cam_obj = np.linalg.inv(self.cam) @ self.objeto
+        M = T@Rz@Ry@Rx
+        self.cam = M@self.cam
         self.update_canvas()
 
     def update_cam(self,line_edits):
         values = self.read_transform_values(line_edits)
-
         T = move(values[0], values[2], values[4])
         Rx = x_rotation(values[1])
         Ry = y_rotation(values[3])
         Rz = z_rotation(values[5])
-        R = Rz @ Ry @ Rx
-
-        self.cam[0:3, 3] = self.cam[0:3, 3] + self.cam[0:3, 0:3] @ T[0:3, 3]
-        self.cam[0:3, 0:3] = self.cam[0:3, 0:3] @ R[0:3, 0:3]
-        self.cam_obj = np.linalg.inv(self.cam) @ self.objeto
+        M = T@Rz@Ry@Rx
+        self.cam = self.cam@M
         self.update_canvas()
     
     def projection_2d(self):
@@ -335,9 +327,9 @@ class MainWindow(QMainWindow):
 
         self.ax2.clear()
         set_plot(self.ax2, self.fig2, lim=[-5, 5])
-        self.ax2 = draw_arrows(self.world[:, -1], self.world[:, 0:3], self.ax2, 3)
-        self.ax2 = draw_arrows(self.cam[:, -1], self.cam[:, 0:3], self.ax2, 1)
-        self.ax2.plot(self.objeto[0, :], self.objeto[1, :], self.objeto[2, :], 'r')
+        self.ax2 = draw_arrows(self.world[:, -1], self.world[:, 0:3], self.ax2, 1.5)
+        self.ax2 = draw_arrows(self.cam[:, -1], self.cam[:, 0:3], self.ax2, 0.75)
+        self.ax2.plot(self.objeto[0, :], self.objeto[1, :], self.objeto[2, :], 'b')
 
         self.canvas1.draw()
         self.canvas2.draw()
