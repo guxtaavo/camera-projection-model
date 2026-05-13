@@ -81,7 +81,7 @@ camera-projection-model/
 │       └── bulbasaur.STL
 │
 ├── src/
-│   ├── camera.py           # Camera projection and intrinsic matrix functions
+│   ├── camera.py           # Camera projection
 │   ├── draw.py             # Plot configuration and reference frame drawing
 │   ├── gui_template.py     # Main graphical interface
 │   ├── object.py           # STL loading and object processing

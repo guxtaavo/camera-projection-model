@@ -9,7 +9,7 @@ from pathlib import Path
 from .camera import image_project
 from .object import load_object
 from .draw import set_plot, draw_arrows
-from .transformations import *
+from .transformations import move, z_rotation, y_rotation, x_rotation
 
 # Defining the relative path of the object
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
