@@ -4,36 +4,36 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QGridLayout, QLabel, QWid
 from PyQt5.QtGui import QDoubleValidator
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from mpl_toolkits.mplot3d import Axes3D
-import numpy as np
 from numpy import array
+import numpy as np
 from pathlib import Path
-from camera import Camera
-from object import Object
-from transformable import Transformable
+from .camera import *
+from .object import *
+from .draw import *
+from .transformations import *
 
+# Defining the relative path of the object
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-OBJECT_NAME = "gengar"
+OBJECT_NAME = "bulbasaur" # Edit here to replace the object
 OBJECT_STL_PATH = PROJECT_ROOT / "assets" / "models" / f"{OBJECT_NAME}.stl"
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        #definindo as variaveis
         self.set_variables()
-        #Ajustando a tela
         self.setWindowTitle("Grid Layout")
         self.setGeometry(100, 100,1280 , 720)
         self.setup_ui()
 
     def set_variables(self):
-        self.objeto_original = Object(OBJECT_STL_PATH)
+        self.objeto_original = load_object(stl_path=OBJECT_STL_PATH)
         self.objeto = self.objeto_original
-        self.cam_original = Camera()
-        self.cam = Camera()
+        self.cam_original = np.eye(4)
+        self.cam = self.cam_original.copy()
         self.px_base = 1280
         self.px_altura = 720
-        self.dist_foc = 15
+        self.dist_foc = 20
         self.stheta = 0
         self.ox = self.px_base/2
         self.oy = self.px_altura/2
@@ -57,7 +57,7 @@ class MainWindow(QMainWindow):
         grid_layout.addWidget(line_edit_widget3, 0, 2)
         grid_layout.addWidget(self.canvas, 1, 0, 1, 3)
 
-          # Criar um widget para agrupar o botão de reset
+        # Criar um widget para agrupar o botão de reset
         reset_widget = QWidget()
         reset_layout = QHBoxLayout()
         reset_widget.setLayout(reset_layout)
@@ -114,8 +114,7 @@ class MainWindow(QMainWindow):
 
         # Criar o botão de atualização
         update_button = QPushButton("Atualizar")
-
-        ##### Você deverá criar, no espaço reservado ao final, a função self.update_params_intrinsc ou outra que você queira 
+ 
         # Conectar a função de atualização aos sinais de clique do botão
         update_button.clicked.connect(lambda: self.update_params_intrinsc(line_edits))
 
@@ -210,17 +209,15 @@ class MainWindow(QMainWindow):
         self.canvas1 = FigureCanvas(self.fig1)
 
         ##### Falta acertar os limites do eixo X
-        self.ax1.set_xlim([0, self.cam.widthPixels])
-        self.ax1.xaxis.tick_top()
-        
+        self.ax1.set_xlim([0,self.px_base])
         ##### Falta acertar os limites do eixo Y
-        self.ax1.set_ylim([self.cam.heightPixels, 0])
-
+        self.ax1.set_ylim([self.px_altura,0])
+        
         ##### Você deverá criar a função de projeção 
         object_2d = self.projection_2d()
 
         ##### Falta plotar o object_2d que retornou da projeção
-        
+          
         self.ax1.grid('True')
         self.ax1.set_aspect('equal')  
         canvas_layout.addWidget(self.canvas1)
@@ -233,58 +230,36 @@ class MainWindow(QMainWindow):
         
         self.canvas2 = FigureCanvas(self.fig2)
         canvas_layout.addWidget(self.canvas2)
-        
-
-
-        # TESTEEEE
-
-        # base vector values
-        e1 = np.array([[1],[0],[0],[0]]) # X
-        e2 = np.array([[0],[1],[0],[0]]) # Y
-        e3 = np.array([[0],[0],[1],[0]]) # Z
-        base = np.hstack((e1,e2,e3))
-        #origin point
-        origin =np.array([[0],[0],[0],[1]])
-
-        # Create camera and world frames
-        cam  = np.hstack([base,origin])
-        world = np.hstack([base,origin])
-
-        print ('Camera Reference Frame: \n', cam)
-        print ('World Reference Frame: \n', world)
-
-        cam_transf = Transformable(cam)
-        cam_transf.x_rotation(145)        # agora aplica de verdade
-        cam_transf.z_rotation(-20)
-        cam_transf.move(2,2,2)
-
-        cam = cam_transf.ref
-
-        # Ploting the world reference frame and the camera frame
-        axis = set_plot(lim=[-5,5])
-        axis = draw_arrows(world[:,-1],world[:,0:3],axis,3)
-        axis = draw_arrows(cam[:,-1],cam[:,0:3],axis,1.5)
-        axis.set_title("Camera and World Reference Frames")
-
-        obj = Object(OBJECT_STL_PATH)
-
-        triangles = obj.vectors  
-
-        from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-
-        poly = Poly3DCollection(triangles, alpha=0.4)
-        poly.set_facecolor('cyan')
-        poly.set_edgecolor('gray')
-        axis.add_collection3d(poly)
-
-        plt.show()
-
 
         # Retornar o widget de canvas
         return canvas_widget
 
+
+    ##### Você deverá criar as suas funções aqui
+    
     def update_params_intrinsc(self, line_edits):
-        self.cam.update_params_intrinsc(line_edits)
+        params = [
+            self.px_base,
+            self.px_altura,
+            self.ccd[0],
+            self.ccd[1],
+            self.dist_foc,
+            self.stheta,
+        ]
+
+        for index, line_edit in enumerate(line_edits):
+            text = line_edit.text().strip().replace(",", ".")
+            if text:
+                params[index] = float(text)
+
+        self.px_base = params[0]
+        self.px_altura = params[1]
+        self.ccd = [params[2], params[3]]
+        self.dist_foc = params[4]
+        self.stheta = params[5]
+        self.ox = self.px_base / 2
+        self.oy = self.px_altura / 2
+        self.projection_matrix = self.generate_intrinsic_params_matrix()
         self.update_canvas()
 
     def update_world(self,line_edits):
@@ -297,10 +272,17 @@ class MainWindow(QMainWindow):
         return 
     
     def generate_intrinsic_params_matrix(self):
-        return 
-    
+        sx = self.px_base / self.ccd[0]
+        sy = self.px_altura / self.ccd[1]
+
+        return array([
+            [self.dist_foc * sx, self.dist_foc * self.stheta, self.ox],
+            [0, self.dist_foc * sy, self.oy],
+            [0, 0, 1],
+        ])
+
     def update_canvas(self):
-        return 
+        ...
     
     def reset_canvas(self):
         return

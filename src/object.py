@@ -1,26 +1,46 @@
 import numpy as np
 from stl import mesh
 
-class Object():
-    def __init__(self,object):
-        self.mesh = mesh.Mesh.from_file(object)
-        self._normalize()
-        self.obj = self.setObj()
-        self.vectors = self.mesh.vectors 
+def load_mesh(stl_path):
+    return mesh.Mesh.from_file(str(stl_path))
 
-    def _normalize(self):
-        """Centraliza no centroide e escala para caber em [-1, 1]."""
-        verts = self.mesh.vectors.reshape(-1, 3)
-        centroid = verts.mean(axis=0)
-        self.mesh.translate(-centroid)
-        max_extent = np.abs(self.mesh.vectors).max()
-        if max_extent > 0:
-            self.mesh.vectors /= max_extent
+def normalize_mesh(stl_mesh):
+    verts = stl_mesh.vectors.reshape(-1, 3)
 
-    def setObj(self):
-        x = self.mesh.x.flatten()
-        y = self.mesh.y.flatten()
-        z = self.mesh.z.flatten()
-        obj = np.array([x.T,y.T,z.T,np.ones(x.size)])
+    centroid = verts.mean(axis=0)
 
-        return obj
+    stl_mesh.translate(-centroid)
+
+    max_extent = np.abs(stl_mesh.vectors).max()
+
+    if max_extent > 0:
+        stl_mesh.vectors /= max_extent
+
+    return stl_mesh
+
+def mesh_to_homogeneous(stl_mesh):
+    x = stl_mesh.x.flatten()
+    y = stl_mesh.y.flatten()
+    z = stl_mesh.z.flatten()
+
+    obj = np.array([
+        x,
+        y,
+        z,
+        np.ones(x.size)
+    ])
+
+    return obj
+
+
+def load_object(stl_path, normalize=True):
+    stl_mesh = load_mesh(stl_path)
+
+    if normalize:
+        stl_mesh = normalize_mesh(stl_mesh)
+
+    obj = mesh_to_homogeneous(stl_mesh)
+
+    vectors = stl_mesh.vectors
+
+    return obj, vectors, stl_mesh
